@@ -209,13 +209,13 @@ public class QRCodeReaderViewController: UIViewController {
     delegate?.readerDidCancel(self)
   }
 
-  func switchCameraAction(_ button: SwitchCameraButton) {
+  func switchCameraAction(_ button: UIButton) {
     if let newDevice = codeReader.switchDeviceInput() {
       delegate?.reader(self, didSwitchCamera: newDevice)
     }
   }
   
-  func toggleTorchAction(_ button: ToggleTorchButton) {
+  func toggleTorchAction(_ button: UIButton) {
     codeReader.toggleTorch()
   }
 }

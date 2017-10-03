@@ -26,163 +26,183 @@
 
 import UIKit
 
-final public class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
-  public lazy var overlayView: UIView? = {
-    let ov = ReaderOverlayView()
-
-    ov.backgroundColor                           = .clear
-    ov.clipsToBounds                             = true
-    ov.translatesAutoresizingMaskIntoConstraints = false
-
-    return ov
-  }()
-
-  public let cameraView: UIView = {
-    let cv = UIView()
-
-    cv.clipsToBounds                             = true
-    cv.translatesAutoresizingMaskIntoConstraints = false
-
-    return cv
-  }()
-
-  public lazy var cancelButton: UIButton? = {
-    let cb = UIButton()
-
-    cb.translatesAutoresizingMaskIntoConstraints = false
-    cb.setTitleColor(.gray, for: .highlighted)
-
-    return cb
-  }()
-
-  public lazy var switchCameraButton: UIButton? = {
-    let scb = SwitchCameraButton()
-
-    scb.translatesAutoresizingMaskIntoConstraints = false
-
-    return scb
-  }()
-
-  public lazy var toggleTorchButton: UIButton? = {
-    let ttb = ToggleTorchButton()
-
-    ttb.translatesAutoresizingMaskIntoConstraints = false
-
-    return ttb
-  }()
-
-  private weak var reader: QRCodeReader?
-
-  public func setupComponents(showCancelButton: Bool, showSwitchCameraButton: Bool, showTorchButton: Bool, showOverlayView: Bool, reader: QRCodeReader?) {
-    self.reader = reader
-
-    addComponents()
-
-    cancelButton?.isHidden       = !showCancelButton
-    switchCameraButton?.isHidden = !showSwitchCameraButton
-    toggleTorchButton?.isHidden  = !showTorchButton
-    overlayView?.isHidden        = !showOverlayView
-
-    guard let cb = cancelButton, let scb = switchCameraButton, let ttb = toggleTorchButton, let ov = overlayView else { return }
-
-    let views = ["cv": cameraView, "ov": ov, "cb": cb, "scb": scb, "ttb": ttb]
-
-    addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[cv]|", options: [], metrics: nil, views: views))
-
-    if showCancelButton {
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[cv][cb(40)]|", options: [], metrics: nil, views: views))
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-[cb]-|", options: [], metrics: nil, views: views))
-    }
-    else {
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[cv]|", options: [], metrics: nil, views: views))
-    }
-
-    if showSwitchCameraButton {
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[scb(50)]", options: [], metrics: nil, views: views))
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:[scb(70)]|", options: [], metrics: nil, views: views))
-    }
-
-    if showTorchButton {
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-[ttb(50)]", options: [], metrics: nil, views: views))
-      addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[ttb(70)]", options: [], metrics: nil, views: views))
-    }
-
-    for attribute in Array<NSLayoutAttribute>([.left, .top, .right, .bottom]) {
-      addConstraint(NSLayoutConstraint(item: ov, attribute: attribute, relatedBy: .equal, toItem: cameraView, attribute: attribute, multiplier: 1, constant: 0))
-    }
-  }
-
-  public override func layoutSubviews() {
-    super.layoutSubviews()
-
-    reader?.previewLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height)
-  }
-
-  // MARK: - Scan Result Indication
-
-  func startTimerForBorderReset() {
-    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + .seconds(1)) {
-      if let ovl = self.overlayView as? ReaderOverlayView {
-        ovl.overlayColor = .white
-      }
-    }
-  }
-
-  func addRedBorder() {
-    self.startTimerForBorderReset()
-
-    if let ovl = self.overlayView as? ReaderOverlayView {
-      ovl.overlayColor = .red
-    }
-  }
-
-  func addGreenBorder() {
-    self.startTimerForBorderReset()
+public enum QRCodeReaderViewAppearance {
+    public static var torchButtonImage: UIImage?
+    public static var switchButtonImage: UIImage?
+    public static var cancelButtonImage: UIImage?
     
-    if let ovl = self.overlayView as? ReaderOverlayView {
-      ovl.overlayColor = .green
-    }
-  }
+    public static var hintText: String?
+}
 
-  @objc func orientationDidChange() {
-    setNeedsDisplay()
-    overlayView?.setNeedsDisplay()
-
-    if let connection = reader?.previewLayer.connection, connection.isVideoOrientationSupported {
-      let orientation                    = UIDevice.current.orientation
-      let supportedInterfaceOrientations = UIApplication.shared.supportedInterfaceOrientations(for: nil)
-
-      connection.videoOrientation = QRCodeReader.videoOrientation(deviceOrientation: orientation, withSupportedOrientations: supportedInterfaceOrientations, fallbackOrientation: connection.videoOrientation)
-    }
-  }
-
-  // MARK: - Convenience Methods
-
-  private func addComponents() {
-    NotificationCenter.default.addObserver(self, selector: #selector(QRCodeReaderView.orientationDidChange), name: .UIDeviceOrientationDidChange, object: nil)
-
-    addSubview(cameraView)
-
-    if let ov = overlayView {
-      addSubview(ov)
-    }
-
-    if let scb = switchCameraButton {
-      addSubview(scb)
-    }
-
-    if let ttb = toggleTorchButton {
-      addSubview(ttb)
+final class QRCodeReaderView: UIView, QRCodeReaderDisplayable {
+    lazy var overlayView: UIView? = {
+        let ov = ReaderOverlayView()
+        
+        ov.backgroundColor                           = .clear
+        ov.clipsToBounds                             = true
+        ov.translatesAutoresizingMaskIntoConstraints = false
+        
+        return ov
+    }()
+    
+    let cameraView: UIView = {
+        let cv = UIView()
+        
+        cv.clipsToBounds                             = true
+        cv.translatesAutoresizingMaskIntoConstraints = false
+        
+        return cv
+    }()
+    
+    lazy var cancelButton: UIButton? = {
+        return self.getButton(with: QRCodeReaderViewAppearance.cancelButtonImage)
+    }()
+    
+    lazy var switchCameraButton: UIButton? = {
+        return self.getButton(with: QRCodeReaderViewAppearance.switchButtonImage)
+    }()
+    
+    lazy var toggleTorchButton: UIButton? = {
+        return self.getButton(with: QRCodeReaderViewAppearance.torchButtonImage)
+    }()
+    
+    func getButton(with image: UIImage?) -> UIButton {
+        let button = UIButton(type: .custom)
+        button.setImage(image, for: .normal)
+        button.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        button.tintColor = UIColor.white
+        button.layer.cornerRadius = 10
+        
+        button.translatesAutoresizingMaskIntoConstraints = false
+        
+        if #available(iOS 9.0, *) {
+            button.widthAnchor.constraint(equalToConstant: 60).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 60).isActive = true
+        }
+        
+        return button
     }
     
-    if let cb = cancelButton {
-      addSubview(cb)
+    func getLabel(with text: String?) -> UILabel {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.textColor = UIColor.white
+        label.font = label.font.withSize(16)
+        
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineSpacing = 1.4
+        
+        label.attributedText = NSAttributedString(string: (text ?? ""), attributes: [NSParagraphStyleAttributeName: paragraph])
+        
+        label.translatesAutoresizingMaskIntoConstraints = false
+        
+        return label
     }
-
-    if let reader = reader {
-      cameraView.layer.insertSublayer(reader.previewLayer, at: 0)
-      
-      orientationDidChange()
+    
+    func setupComponents(showCancelButton: Bool, showSwitchCameraButton: Bool, showTorchButton: Bool, showOverlayView: Bool) {
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        addComponents()
+        
+        cancelButton?.isHidden       = !showCancelButton
+        switchCameraButton?.isHidden = !showSwitchCameraButton
+        toggleTorchButton?.isHidden  = !showTorchButton
+        overlayView?.isHidden        = !showOverlayView
+        
+        guard let cb = cancelButton, let scb = switchCameraButton, let ttb = toggleTorchButton, let ov = overlayView else { return }
+        
+        let labelView = UIView()
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        labelView.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        labelView.layer.cornerRadius = 10
+        labelView.clipsToBounds = true
+        
+        let hintLabel: UILabel = getLabel(with: QRCodeReaderViewAppearance.hintText)
+        
+        let views = ["cv": cameraView, "ov": ov, "cb": cb, "scb": scb, "ttb": ttb, "hl": hintLabel, "lv": labelView]
+        
+        addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[cv]|", options: [], metrics: nil, views: views))
+        addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[cv]|", options: [], metrics: nil, views: views))
+        
+        addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[ov]|", options: [], metrics: nil, views: views))
+        
+        if QRCodeReaderViewAppearance.hintText != nil {
+            labelView.addSubview(hintLabel)
+            addSubview(labelView)
+            
+            addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-16-[hl]-16-|", options: [], metrics: nil, views: views))
+            addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-8-[hl]-8-|", options: [], metrics: nil, views: views))
+            
+            addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|-24-[lv]-24-|", options: [], metrics: nil, views: views))
+            
+            addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-32-[lv][ov]-108-|", options: [], metrics: nil, views: views))
+        } else {
+            addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|-32-[ov]-108-|", options: [], metrics: nil, views: views))
+        }
     }
-  }
+    
+    // MARK: - Scan Result Indication
+    
+    func startTimerForBorderReset() {
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + .seconds(1)) {
+            if let ovl = self.overlayView as? ReaderOverlayView {
+                ovl.overlayColor = .white
+            }
+        }
+    }
+    
+    func addRedBorder() {
+        self.startTimerForBorderReset()
+        if let ovl = self.overlayView as? ReaderOverlayView {
+            ovl.overlayColor = .red
+        }
+    }
+    
+    func addGreenBorder() {
+        self.startTimerForBorderReset()
+        if let ovl = self.overlayView as? ReaderOverlayView {
+            ovl.overlayColor = .green
+        }
+    }
+    
+    // MARK: - Convenience Methods
+    
+    private func addComponents() {
+        if #available(iOS 9.0, *) {
+            addSubview(cameraView)
+            let stackView = UIStackView()
+            stackView.translatesAutoresizingMaskIntoConstraints = false
+            stackView.axis = .horizontal
+            stackView.alignment = .center
+            stackView.distribution = .equalSpacing
+            
+            addSubview(stackView)
+            
+            let sideMargin: CGFloat = 64
+            
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -24).isActive = true
+            stackView.leftAnchor.constraint(equalTo: leftAnchor, constant: sideMargin).isActive = true
+            stackView.rightAnchor.constraint(equalTo: rightAnchor, constant: -sideMargin).isActive = true
+            stackView.heightAnchor.constraint(equalToConstant: 60).isActive = true
+            
+            if let cb = cancelButton {
+                stackView.addArrangedSubview(cb)
+            }
+            
+            if let ttb = toggleTorchButton {
+                stackView.addArrangedSubview(ttb)
+            }
+            
+            if let scb = switchCameraButton {
+                stackView.addArrangedSubview(scb)
+            }
+        }
+        
+        if let ov = overlayView {
+            addSubview(ov)
+        }
+    }
 }
